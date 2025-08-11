@@ -107,7 +107,7 @@ class QwenImageSize:
                     "default": 0,
                     "min": 0,
                     "max": MAX_RESOLUTION,
-                    "step": 8,  #
+                    "step": 8,
                     "display": "number"
                 }),
                 "height_override": ("INT", {
@@ -125,20 +125,13 @@ class QwenImageSize:
     CATEGORY = "latent/resolution"
 
     @classmethod
-    def HIDE_INPUTS(s, model_type):
-        """Hide unused resolution fields based on model type."""
-        to_hide = {
-            "Qwen-Image": ["sdxl_resolution", "flux_resolution"],
-            "SDXL": ["qwen_resolution", "flux_resolution"],
-            "Flux": ["qwen_resolution", "sdxl_resolution"]
-        }
-        return to_hide.get(model_type, [])
+    def IS_CHANGED(s, *args, **kwargs):
+        return float("NaN")
 
     def execute(self, model_type: str, qwen_resolution: str, sdxl_resolution: str, flux_resolution: str,
              batch_size: int, width_override: int = 0, height_override: int = 0) -> tuple:
         
         batch_size = max(1, batch_size)
-        
         
         resolution_map = {
             "Qwen-Image": qwen_resolution,
@@ -147,7 +140,6 @@ class QwenImageSize:
         }
         resolution = resolution_map[model_type]
 
-       
         try:
             width_str, height_str = resolution.split(" ")[0].split("x")
             width = int(width_str)
@@ -155,14 +147,12 @@ class QwenImageSize:
         except (ValueError, IndexError):
             raise ValueError(f"Invalid resolution format: {resolution}. Expected format: 'WIDTHxHEIGHT (RATIO)'")
 
-        
         if width_override > 0:
             width = width_override
         if height_override > 0:
             height = height_override
-
         
-        if not (width_override > 0 or height_override > 0):
+        if model_type != "Qwen-Image" and not (width_override > 0 or height_override > 0):
             width = (width // 64) * 64
             height = (height // 64) * 64
 
