@@ -2,7 +2,7 @@
 
 A simple ComfyUI node that creates empty latents with preset sizes for Qwen Image, SDXL and Flux models. Includes common resolutions for each model and allows custom size overrides.
 
-![Screenshot of the nodel](Screenshot.png)
+![Screenshot of the nodel](screenshot-v1.0.1.png)
 ## Features
 
 - Pre-configured sizes for Qwen-Image, SDXL and Flux
