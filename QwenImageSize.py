@@ -78,8 +78,8 @@ class QwenImageSize:
         ],
         "Flux2": [
             # Vertical orientations (h > w)
-            "1408x2816 (9:64 Vertical)",
-            "1408x2688 (52:99 Vertical)",
+            "1408x2816 (1:2 Vertical)",
+            "1408x2688 (11:21 Vertical)",
             "1536x2688 (4:7 Vertical)",
             "1536x2560 (3:5 Vertical)",
             "1664x2432 (13:19 Vertical)",
