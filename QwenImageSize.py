@@ -26,6 +26,26 @@ class QwenImageSize:
             "1584x1056 (3:2 Wide)",
             "1472x1140 (4:3 Wide)",
         ],
+        "Z-Image": [
+            # Vertical orientations (h > w)
+            "720x1280 (9:16 Portrait)",
+            "900x1600 (9:16 Portrait)",
+            "832x1248 (2:3 Portrait)",
+            "1024x1536 (2:3 Portrait)",
+            "864x1152 (3:4 Portrait)",
+            "960x1280 (3:4 Portrait)",
+            # Square
+            "1024x1024 (1:1 Square)",
+            "1280x1280 (1:1 Square)",
+            "1536x1536 (1:1 Square)",
+            # Horizontal orientations (w > h)
+            "1280x720 (16:9 Landscape)",
+            "1600x900 (16:9 Landscape)",
+            "1248x832 (3:2 Landscape)",
+            "1536x1024 (3:2 Landscape)",
+            "1152x864 (4:3 Landscape)",
+            "1280x960 (4:3 Landscape)",
+        ],
         "SDXL": [
             # Vertical orientations (h > w)
             "704x1408 (1:2 Vertical)",
@@ -122,6 +142,9 @@ class QwenImageSize:
                 "qwen_resolution": (s.MODEL_RESOLUTIONS["Qwen-Image"], {
                     "default": s.MODEL_RESOLUTIONS["Qwen-Image"][0],
                 }),
+                "zimage_resolution": (s.MODEL_RESOLUTIONS["Z-Image"], {
+                    "default": s.MODEL_RESOLUTIONS["Z-Image"][0],
+                }),
                 "sdxl_resolution": (s.MODEL_RESOLUTIONS["SDXL"], {
                     "default": s.MODEL_RESOLUTIONS["SDXL"][0],
                 }),
@@ -138,7 +161,7 @@ class QwenImageSize:
                     "step": 1,
                     "display": "number"
                 }),
-                
+
                 "width_override": ("INT", {
                     "default": 0,
                     "min": 0,
@@ -150,13 +173,13 @@ class QwenImageSize:
                     "default": 0,
                     "min": 0,
                     "max": MAX_RESOLUTION,
-                    "step": 8,  
+                    "step": 8,
                     "display": "number"
                 }),
             }}
 
-    RETURN_TYPES = ("LATENT", "INT", "INT",)
-    RETURN_NAMES = ("LATENT", "width", "height",)
+    RETURN_TYPES = ("LATENT", "INT", "INT", "INT",)
+    RETURN_NAMES = ("LATENT", "width", "height", "batch_size",)
     FUNCTION = "execute"
     CATEGORY = "latent/resolution"
 
@@ -164,13 +187,15 @@ class QwenImageSize:
     def IS_CHANGED(s, *args, **kwargs):
         return float("NaN")
 
-    def execute(self, model_type: str, qwen_resolution: str, sdxl_resolution: str, flux_resolution: str, flux2_resolution: str,
-             batch_size: int, width_override: int = 0, height_override: int = 0) -> tuple:
-        
+    def execute(self, model_type: str, qwen_resolution: str, zimage_resolution: str, sdxl_resolution: str,
+             flux_resolution: str, flux2_resolution: str, batch_size: int, width_override: int = 0,
+             height_override: int = 0) -> tuple:
+
         batch_size = max(1, batch_size)
-        
+
         resolution_map = {
             "Qwen-Image": qwen_resolution,
+            "Z-Image": zimage_resolution,
             "SDXL": sdxl_resolution,
             "Flux": flux_resolution,
             "Flux2": flux2_resolution,
@@ -188,19 +213,163 @@ class QwenImageSize:
             width = width_override
         if height_override > 0:
             height = height_override
-        
-        if model_type != "Qwen-Image" and not (width_override > 0 or height_override > 0):
+
+        if model_type not in ("Qwen-Image", "Z-Image") and not (width_override > 0 or height_override > 0):
             width = (width // 64) * 64
             height = (height // 64) * 64
 
         latent = torch.zeros([batch_size, 4, height // 8, width // 8], device=self.device)
 
-        return ({"samples": latent}, width, height,) 
+        return ({"samples": latent}, width, height, batch_size,) 
+
+class QwenImageSizeSimple:
+    """A simplified ComfyUI node that generates empty latents using aspect ratios.
+
+    The aspect ratio determines the actual resolution based on the selected model.
+    Each model has different optimal resolutions for the same aspect ratio.
+    """
+
+    def __init__(self):
+        """Initialize the node with the appropriate device."""
+        self.device = comfy.model_management.intermediate_device()
+
+    # Same model resolutions as the original node
+    MODEL_RESOLUTIONS: dict[str, list[str]] = QwenImageSize.MODEL_RESOLUTIONS
+
+    # Common aspect ratios supported by most models
+    ASPECT_RATIOS = [
+        "1:1 (Square)",
+        "16:9 (Landscape)",
+        "9:16 (Portrait)",
+        "4:3 (Landscape)",
+        "3:4 (Portrait)",
+        "3:2 (Landscape)",
+        "2:3 (Portrait)",
+    ]
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model_type": (list(cls.MODEL_RESOLUTIONS.keys()), {
+                    "default": "Qwen-Image",
+                }),
+                "aspect_ratio": (cls.ASPECT_RATIOS, {
+                    "default": cls.ASPECT_RATIOS[0],
+                }),
+                "batch_size": ("INT", {
+                    "default": 1,
+                    "min": 1,
+                    "max": 64,
+                    "step": 1,
+                    "display": "number"
+                }),
+                "width_override": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8,
+                    "display": "number"
+                }),
+                "height_override": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": MAX_RESOLUTION,
+                    "step": 8,
+                    "display": "number"
+                }),
+            }}
+
+    RETURN_TYPES = ("LATENT", "INT", "INT", "INT",)
+    RETURN_NAMES = ("LATENT", "width", "height", "batch_size",)
+    FUNCTION = "execute"
+    CATEGORY = "latent/resolution"
+
+    @classmethod
+    def IS_CHANGED(s, *args, **kwargs):
+        return float("NaN")
+
+    def _extract_aspect_ratio(self, resolution_str: str) -> str:
+        """Extract the aspect ratio from a resolution string like '928x1664 (9:16 Vertical)'."""
+        try:
+            # Extract the part between parentheses
+            ratio_part = resolution_str.split("(")[1].split(")")[0]
+            # Get just the ratio (e.g., "9:16" from "9:16 Vertical")
+            ratio = ratio_part.split()[0]
+            return ratio
+        except (IndexError, AttributeError):
+            return None
+
+    def _find_resolution_by_aspect_ratio(self, model_type: str, aspect_ratio: str) -> str:
+        """Find the best resolution for a given model and aspect ratio."""
+        # Extract the ratio from the aspect_ratio string (e.g., "9:16" from "9:16 (Portrait)")
+        target_ratio = aspect_ratio.split()[0]
+
+        # Get all resolutions for this model
+        resolutions = self.MODEL_RESOLUTIONS.get(model_type, [])
+        if not resolutions:
+            raise ValueError(f"Unknown model type: {model_type}")
+
+        # First, try to find an exact match for the aspect ratio
+        for resolution in resolutions:
+            ratio = self._extract_aspect_ratio(resolution)
+            if ratio == target_ratio:
+                return resolution
+
+        # If no exact match, find the closest one (same orientation)
+        # Determine if we want portrait (h > w) or landscape (w > h)
+        is_portrait = ":" in target_ratio and int(target_ratio.split(":")[0]) < int(target_ratio.split(":")[1])
+
+        # Try to find any resolution with the same orientation
+        for resolution in resolutions:
+            try:
+                w_str, h_str = resolution.split(" ")[0].split("x")
+                w, h = int(w_str), int(h_str)
+                if is_portrait and h > w:
+                    return resolution
+                elif not is_portrait and w > h:
+                    return resolution
+            except (ValueError, IndexError):
+                continue
+
+        # Fallback to first resolution (usually square or close to square)
+        return resolutions[0]
+
+    def execute(self, model_type: str, aspect_ratio: str, batch_size: int,
+             width_override: int = 0, height_override: int = 0) -> tuple:
+
+        batch_size = max(1, batch_size)
+
+        # Find the appropriate resolution based on model and aspect ratio
+        resolution = self._find_resolution_by_aspect_ratio(model_type, aspect_ratio)
+
+        try:
+            width_str, height_str = resolution.split(" ")[0].split("x")
+            width = int(width_str)
+            height = int(height_str)
+        except (ValueError, IndexError):
+            raise ValueError(f"Invalid resolution format: {resolution}. Expected format: 'WIDTHxHEIGHT (RATIO)'")
+
+        if width_override > 0:
+            width = width_override
+        if height_override > 0:
+            height = height_override
+
+        if model_type not in ("Qwen-Image", "Z-Image") and not (width_override > 0 or height_override > 0):
+            width = (width // 64) * 64
+            height = (height // 64) * 64
+
+        latent = torch.zeros([batch_size, 4, height // 8, width // 8], device=self.device)
+
+        return ({"samples": latent}, width, height, batch_size,)
+
 
 MISC_CLASS_MAPPINGS = {
     "QwenImageSize": QwenImageSize,
+    "QwenImageSizeSimple": QwenImageSizeSimple,
 }
 
 MISC_NAME_MAPPINGS = {
     "QwenImageSize": "📐 Qwen Image Size Picker",
+    "QwenImageSizeSimple": "📐 Qwen Image Size Picker (Simple)",
 }
